@@ -1,0 +1,6 @@
+obj raft_member
+
+state: oneOf(leader, follower, candidate)
+term number:
+knownLeader:
+timeout_amt:

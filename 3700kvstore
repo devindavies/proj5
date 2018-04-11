@@ -1,0 +1,185 @@
+#!/usr/bin/env python
+
+import sys, socket, select, time, json, random, math
+
+# Your ID number
+my_id = sys.argv[1]
+# The ID numbers of all the other replicas
+replica_ids = sys.argv[2:]
+# total number of replicants in cblock (just group of servers)
+cblock_size = len(replica_ids) + 1
+quorum = math.ceil(cblock_size / 2.0)
+
+# Connect to the network. All messages to/from other replicas and clients will
+# occur over this socket
+#sock = socket.socket(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+#sock.connect(my_id)
+
+# init last TERM
+last = 0
+
+'''
+Plan
+
+Ok, so not entirely sure what is meant here by a "replica"?  Is this just like a node or?
+
+So in this case sockets are used instead of RPC - starter code just sends a msg every second for now...
+'''
+
+
+# implementation of enum
+def enum(*sequential, **named):
+    enums = dict(zip(sequential, range(len(sequential))), **named)
+    return type('Enum', (), enums)
+
+# each of these returns an integer
+# leader    -> 0
+# follower  -> 1
+# candidate -> 2
+RepModes = enum('LEADER', 'FOLLOWER', 'CANDIDATE')
+
+# init empty log
+logStore = {}
+
+
+# represents a single "replica" member of consensus block
+# I haven't slept enough so yeah, we'll have a consensus block of Replicants (Sigma 6)
+class Replicant(object):
+
+	# init replicant
+	def __init__(self):
+		self.my_id = sys.argv[1]
+		self.mode = RepModes.FOLLOWER # default mode (which is an integer)
+		self.elect_timout = 0
+		self.term = 0
+		self.logStore = {} # not sure if this needs to be inherited from exterior init?
+		self.voter_list = []
+		self.last_inc_response = None # should just be a timestamp otherwise
+		self.peers = sys.argv[2:] # peers in current cblock
+
+	######### messaging - outgoing #########
+
+	'''
+	emit msg to other peers
+	'''
+	def emit_msg(self, msg):
+        sock.send(json.dumps(msg) + "\n")
+
+	######### messaging - incoming #########
+
+	######### leader stuff #########
+
+	'''
+	transition from current mode to leader
+	'''
+	def trans_to_leader(self, req):
+		print '[transition] transitioning to LEADER'
+
+	######### follower stuff #########
+
+	'''
+	transition from current mode to follower
+	'''
+	def trans_to_follower(self, req):
+		print '[transition] transitioning to FOLLOWER'
+
+		try:
+			newTerm = max(self.term, request["term"])
+		except Exception as e:
+			print '[error] could not determine latest term!\n>>>{}'.format(e)
+
+		self.mode = RepModes.FOLLOWER
+		self.term = newTerm
+		self.voter_list = []
+		self.last_inc_response = time.time()
+
+	######### candidate stuff #########
+
+	'''
+	signal new vote
+	* for all neighbors of current replicant to get them all to transition mode to CANDIDATE
+	* also involves updating term & a few other attributes
+	'''
+	def signal_new_vote(self):
+
+		print '[voting] signaling new vote'
+		# print clients signalling?
+		self.mode = RepModes.CANDIDATE
+		self.term += 1
+		self.voter_list = []
+		self.last_inc_response = time.time()
+		# for member in peers -> send msg to signal new vote
+		for r in self.peers:
+			# msg to signal new vote
+			vote_msg = {
+				'type': 'sig_vote',
+				'term': self.term,
+	            'leader': self.leader
+	            'src': self.my_id,
+	            'dst': r,
+	            'log_update': None
+	        }
+	        # emit msg
+			self.emit_msg(vote_msg)
+		
+		
+	######### voting #########
+
+	'''
+	elect a candidate as leader
+	'''
+	def elect_new_leader(self, req):
+		print '[voting] electing a new candidate as leader'
+
+	######### maintaining sync #########
+	
+
+	'''
+	send heartbeat
+	'''
+	def emit_heartbeat(self):
+		print '[sync] emiting heartbeat!'
+
+	# run the thing
+	def run(self):
+		print 'running'
+
+		last_heartbeat = time.time()
+		self.last_inc_response = time.time()
+
+		# begin event loop
+		# event loop with a lot of stuff missing
+		while True:
+			ready = select.select([sock], [], [], 0.1)[0]
+			
+			if sock in ready:
+				msg_raw = sock.recv(32768)
+				
+				if len(msg_raw) == 0: continue
+				msg = json.loads(msg_raw)
+				
+				# For now, ignore get() and put() from clients
+				if msg['type'] in ['get', 'put']:
+		                        pass
+				
+				# Handle noop messages. This may be removed from your final implementation
+				elif msg['type'] == 'noop':
+					print '%s received a NOOP from %s' % (msg['dst'], msg['src'])
+				
+			clock = time.time()
+			if clock-last > 2:
+				# Send a no-op message to a random peer every two seconds, just for fun
+				# You definitely want to remove this from your implementation
+				msg = {'src': my_id, 'dst': random.choice(replica_ids), 'leader': 'FFFF', 'type': 'noop'}
+				sock.send(json.dumps(msg))
+				print '%s sending a NOOP to %s' % (msg['src'], msg['dst'])
+				last = clock
+        
+
+'''
+run the thing
+'''
+if __name__ == "__main__":
+	rp = Replicant()
+	# execute
+	rp.run()
